@@ -1,0 +1,304 @@
+NAME
+    DBIx::Roles - Roles for DBI handles
+
+DESCRIPTION
+    The module provides common API for using roles (AKA
+    mixins/interfaces/plugins) on DBI handles. The problem it solves is that
+    there are a lot of interesting and useful "DBIx::" modules on CPAN, that
+    extend the DBI functionality in one or another way, but mostly they
+    insist on wrapping the connection handle themselves, so it is usually
+    not possible to use several of these modules at once. Also, once in a
+    while, one needs a nice-to-have hack, which is not really good enough
+    for CPAN, but is still locally useful - for example, a common
+    "DBI->connect()" wrapper that reads DSN from the config file. Of course,
+    one might simply write a huge wrapper for all possible add-ons, but this
+    approach is not really scalable. Instead, this module allows to
+    construct your own functionality for the DB connection handle, by
+    picking from various bells and whistles provided by other modules in
+    "DBIx::Roles::*" namespaces.
+
+    The module comes with a set of predefined role modules ( see "Predefined
+    role modules").
+
+SYNOPSIS
+    There are three ways to use the module to wrap the DBI connection. The
+    best is IMO is this:
+
+       use DBIx::Roles qw(AutoReconnect SQLAbstract);
+       my $dbh = DBI-> connect($dsn, $user, $pass);
+
+    When importing the module with the list of roles, it also overrides
+    "DBI-> connect" so that calls to it result in creation of "DBIx::Roles"
+    object instance, which then behaves identically to the DBI handle.
+
+    The more generic syntax can be used to explicitly list the required
+    roles:
+
+       use DBIx::Roles;
+       my $dbh = DBIx::Roles->new( qw(AutoReconnect SQLAbstract));
+       $dbh-> connect( $dsn, $user, $pass);
+
+    or even
+
+       use DBIx::Roles;
+       my $dbh = DBIx::Roles-> connect( 
+            [qw(AutoReconnect SQLAbstract)], 
+            $dsn, $user, $pass
+       );
+
+    All these are equivalent, are result in construction of an object that
+    plays roles "DBIx::Roles::AutoReconnect" and "DBIx::Roles::SQLAbstract",
+    and does all DBI functionality.
+
+Predefined role modules
+    All modules included in packages have their own manual pages, here only
+    brief description is provided:
+
+    DBIx::Roles::AutoReconnect - Restarts DB call if database connection
+    breaks. Based on idea of DBIx::AutoReconnect
+
+    DBIx::Roles::Buffered - Buffers write-only queries. Useful with lots of
+    INSERTs and UPDATEs over slow remote connections.
+
+    DBIx::Roles::Default - not a module on its own, the default package that
+    is always included, and need not to be listed explicitly. Implements
+    actual calls to DBI handle.
+
+    DBIx::Roles::Hook - Exports callbacks to override DBI calls.
+
+    DBIx::Roles::InlineArray - Flattens arrays passed as parameters to DBI
+    calls into strings.
+
+    DBIx::Roles::SQLAbstract - Exports methods "insert","select","update"
+    etc in the SQL::Abstract fashion. Inspired by DBIx::Abstract.
+
+    DBIx::Roles::StoredProcedures - Treats any method reached AUTOLOAD as a
+    call to a stored procedure.
+
+Programming interfaces
+    The interface that faces the caller is not fixed. Depending on the
+    functionality provided by roles, the methods can be added, deleted, or
+    completely changed. For example, the mentioned before hack that would
+    want to connect to DSN read from a config file, wouldn't want first
+    three parameters to connect be always present, and might modify the
+    "connect" call so that instead of
+
+       connect( $dsn, $user, $pass, [$attr])
+
+    it might look like
+
+       connect( [$attr])
+
+    Using this fictional module, I'll try to illustrate to how a DBI
+    interface can be changed.
+
+  Writing a new role
+    To be accessible, a new role must reside in a unique package. The
+    "DBIx::Roles" prefix is not required, but its added by default if the
+    imported role name does not contain colons. If the role is to be
+    imported as
+
+        use DBIx::Roles qw(Config);
+
+    then it must be declared as
+
+        package DBIx::Roles::Config;
+
+  Modifying parameters passed to DBI methods
+    To modify the parameters passed the role must define "rewrite" method to
+    transform the parameters:
+
+        sub rewrite
+        {
+            my ( $self, $storage, $method, $parameters) = @_;
+            if ( $method eq 'connect') {
+                 my ( $dsn, $user, $pass) = read_from_config;
+                 unshift @$parameters, $dsn, $user, $pass;
+            }
+            return $self-> next( $method, $parameters);
+        }
+
+    The method is called before any call to DBI methods, so parameters are
+    translated to the DBI syntax.
+
+  Overloading DBI methods
+    If a particular method call is needed to be overloaded, for example,
+    "ping", the package must define a method with the same name:
+
+        sub ping 
+        { 
+           my ( $self, $storage, @parameters) = @_;
+           ...
+        }
+
+    Since all roles are asked recursively, inside each other, the role that
+    wishes to propagate the call further down the line, must call
+
+        return $self-> next( @parameters)
+
+    after finished. If the role decides to intercept the call, "next" need
+    not to be called. Also, in case one needs to intercept not just one but
+    many DBI calls, it is possible to declare the method that is called when
+    any DBI call is issued:
+
+        sub dbi_method
+        {
+           my ( $self, $storage, $method, @parameters) = @_;
+           print "DBI method $method called\n";
+           return $self-> next( $method, @parameters);
+        }
+
+    Note: "next" is important, don't forget calling it
+
+  Overloading DBI attributes
+    Changes to DBI attributes such as "PrintError" and "RaiseError" can be
+    caught by "STORE" method:
+
+        sub STORE
+        {
+            my ( $self, $storage, $key, $val) = @_;
+            print "$key is about to be set to $val, but I won't allow that\n";
+            if ( rand 2) {
+                $val_ref = 42; # alter
+            } else {
+                return;  # deny change
+            }
+            return $self-> next( $key, $val);
+        }
+
+  Declaring own attributes, methods, and private storage
+    If a module needs its own attributes, method, or private storage, it
+    needs to declare "initialize" method:
+
+       sub initialize
+       {
+           my ( $self ) = @_;
+           return {
+               # external attributes
+               ConfigName => '/usr/local/etc/mydbi.conf',
+           }, {
+               # private storage
+               inifile => Config::IniFile->new,
+               loaded  => 0, 
+           }, 
+           # external methods
+           qw(print_config load_config);
+       }
+
+    The method is expected to return at least 2 references, first is a hash
+    reference to the external attributes and the second is the private
+    storage. Additional names are exported so these can be called directly.
+
+    In the example, the programmer that uses the role can change attributes:
+
+        $dbh-> {ConfigName} = 'my.conf';
+
+    And the change can be detected in "STORE", as described above, and can
+    call the role-specific methods:
+
+        $dbh-> print_conf;
+
+    Note that if roles with clashing attribute or method namespaces are
+    loaded, exception is generated on the loading stage.
+
+    Finally, private storage is available as the second argument in all
+    calls to the role ( it is referred here as $storage ).
+
+  Overloading AUTOLOAD
+    If module declares "any" method, all calls that are caught in "AUTOLOAD"
+    are dispatched to it:
+
+       sub any
+       {
+           my ( $self, $storage, $method, @parameters) = @_;
+           if ( 42 == length $method) {
+               return md5( @parameters);
+           }
+           return $self-> next( $method, @parameters);
+       }
+
+    DBIx::Role::StoredProcedures uses this technique to call stored
+    procedures.
+
+  Issuing DBI calls
+    The underlying DBI handle can be reached ( as changed ) by "dbh" method:
+
+        my $dbh = $self-> dbh;
+        $self-> dbh( DBI-> connect( ... ));
+
+    but calling methods on it is not always the right thing to do. Instead
+    of direct call, it is often preferable to call a DBI method so that it
+    is also dispatched to all roles. For example
+
+        sub my_fancy_select { shift-> selectall_arrayref( "SELECT ....") }
+
+    is better than
+
+        sub my_fancy_select { shift-> dbh-> selectall_arrayref( "SELECT ....") }
+
+    because if gives chance to the other roles to overload the call.
+
+    Also, it is also possible to reach to the external layer of the object:
+
+        $self-> object-> selectall_arrayref(...)
+
+    but there's no guarantee that other roles won't change the call's
+    syntax, so calls on "object" are not advisable.
+
+  Issuing DBI::connect
+    Calls to "DBI->connect" can be made directly, but there's another level
+    of flexibility:
+
+        $self-> DBI_connect()
+
+    does the same thing by default, but can be overridden, and thus is
+    preferred to the hardcoded "DBI-> connect".
+
+  Dispatching calls to role methods
+    There are two methods that check each role if a method if available, and
+    if so, call it.
+
+    dispatch $self, $method, @parameters
+        Calls for $method in each role namespace, returns values returne by
+        the first role in the role chain.
+
+    dispatch_dbi_method $self, $wantarray, $method, @parameters
+        Same principle as dispatch, but first calls for $method, and then,
+        if wasn't caught, calls for "dbi_method".
+
+  Restarting DBI calls
+    If the next role method need not to be called directly, instead of
+    "next" one can get reference to the next method by calling
+
+        ( $ref, $private) = $self-> get_next;
+
+    which returns the code reference and an extra parameter for the method.
+    If the method is to be called repeatedly, it should be noted that inside
+    the call "next" can also be called repeatedly. To save and restore the
+    call context, use "context" read-write method:
+
+       my $ctx = $self-> context;
+       AGAIN: eval { $ref->( $self, $private, @param); }
+       if ( $@) {
+           $self-> context( $ctx);
+           goto AGAIN;
+       }
+
+    Note: DBIx::Roles::AutoReconnect restarts DBI calls when failed, check
+    out its source code also.
+
+SEE ALSO
+    Dependencies - DBI, SQL::Abstract
+
+    Similar or related modules - DBIx::Abstract, DBIx::AutoReconnect,
+    DBIx::Simple, DBIx::SQLEngine
+
+COPYRIGHT
+    Copyright (c) 2005 catpipe Systems ApS. All rights reserved.
+
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+
+AUTHOR
+    Dmitry Karasik <dk@catpipe.net>
+
