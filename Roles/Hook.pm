@@ -1,4 +1,4 @@
-# $Id: Hook.pm,v 1.1.1.1 2005/11/20 18:01:06 dk Exp $
+# $Id: Hook.pm,v 1.2 2005/11/22 22:03:09 dk Exp $
 
 package DBIx::Roles::Hook;
 
@@ -67,9 +67,9 @@ DBIx::Roles::Hook - Exports callbacks to override DBI calls.
 
 =head1 DESCRIPTION
 
-Exports the single attribute C<Hooks> that is a hash, where keys can be one of
+Exports a single attribute C<Hooks> that is a hash, where keys are 
 C<connect>, C<disconnect>, C<any>, C<rewrite>, C<dbi_method>, C<STORE>, and
-values are code references, that are called when the corresponding call occurs.
+values are code references, to be called when the corresponding calls occur.
 
 =head1 SYNOPSIS
 

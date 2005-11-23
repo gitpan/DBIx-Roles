@@ -1,4 +1,4 @@
-# $Id: AutoReconnect.pm,v 1.1.1.1 2005/11/20 18:01:06 dk Exp $
+# $Id: AutoReconnect.pm,v 1.2 2005/11/22 22:03:09 dk Exp $
 
 package DBIx::Roles::AutoReconnect;
 
@@ -201,7 +201,7 @@ The role wraps all calls to DBI methods call so that any operation with DB
 connection handle that fails due to connection break ( server shutdown, tcp
 reset etc etc), is automatically reconnected.
 
-The module is useful when a little more robustness is desired for a cheap price;
+The role is useful when a little more robustness is desired for a cheap price;
 the proper DB failure resistance should of course be inherent to the program logic.
 
 =head1 SYNOPSIS
@@ -247,13 +247,13 @@ Default: 5
 Transactions are not restarted if connection breaks, moreover, C<begin_work>,
 C<rollback>, and C<commit> die when called, to protect from unintentional use.
 To use transactions, operate with the original DBI handle returned by
-C<get_handle>. C<AutoCommit> is allowed though. 
+C<dbh>. C<AutoCommit> is allowed though. 
 
-C<RaiseError> is mostly useless with this module, because the DBI errors that
+C<RaiseError> is mostly useless with this role, because the DBI errors that
 might raise the exception, are all wrapped in eval by the connection detector
 code. The only place where it is useful, is when C<ReconnectMaxTries> tries are
 exhausted, and depending on C<RaiseError>, the code dies or returns C<undef>
-from the <connect> call.
+from the C<connect> call.
 
 =head1 SEE ALSO
 

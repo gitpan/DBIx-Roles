@@ -1,11 +1,12 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         DBIx-Roles
-version:      1.00
+version:      1.01
 version_from: Roles.pm
 installdirs:  site
 requires:
     DBI:                           0
+    Scalar::Util:                  0
     SQL::Abstract:                 0
 
 distribution_type: module

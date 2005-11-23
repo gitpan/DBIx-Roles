@@ -11,6 +11,7 @@ WriteMakefile(
 	'PREREQ_PM'   => {
 		'DBI'	=> '0', # or a minimum working version
 		'SQL::Abstract' => '0',
+		'Scalar::Util' => '0',
 	},
 	'DISTNAME' => 'DBIx-Roles',
 	'ABSTRACT' => 'Various roles for DBI handles',
