@@ -1,4 +1,4 @@
-# $Id: Hook.pm,v 1.2 2005/11/22 22:03:09 dk Exp $
+# $Id: Hook.pm,v 1.3 2005/11/29 11:55:01 dk Exp $
 
 package DBIx::Roles::Hook;
 
@@ -16,42 +16,42 @@ sub initialize { undef, \%defaults }
 sub connect
 {
 	my ( $self, $storage, @param) = @_;
-	return $self-> next( @param) unless exists $self-> {attr}-> {Hooks}-> {connect};
+	return $self-> super( @param) unless exists $self-> {attr}-> {Hooks}-> {connect};
 	$self-> {attr}-> {Hooks}-> {connect}->( @param);
 }
 
 sub disconnect
 {
 	my ( $self, $storage, @param) = @_;
-	return $self-> next( @param) unless exists $self-> {attr}-> {Hooks}-> {disconnect};
+	return $self-> super( @param) unless exists $self-> {attr}-> {Hooks}-> {disconnect};
 	$self-> {attr}-> {Hooks}-> {disconnect}->( @param);
 }
 
 sub any
 {
 	my ( $self, $storage, $method, @param) = @_;
-	return $self-> next( $method, @param) unless exists $self-> {attr}-> {Hooks}-> {$method};
+	return $self-> super( $method, @param) unless exists $self-> {attr}-> {Hooks}-> {$method};
 	$self-> {attr}-> {Hooks}-> {$method}->( $self, $storage, @param);
 }
 
 sub rewrite
 {
 	my ( $self, $storage, $method, @param) = @_;
-	return $self-> next( $method, @param) unless exists $self-> {attr}-> {Hooks}-> {"rewrite_$method"};
+	return $self-> super( $method, @param) unless exists $self-> {attr}-> {Hooks}-> {"rewrite_$method"};
 	$self-> {attr}-> {Hooks}-> {"rewrite_$method"}->( $self, $storage, @param);
 }
 
 sub dbi_method
 {
 	my ( $self, $storage, $method, @param) = @_;
-	return $self-> next( $method, @param) unless exists $self-> {attr}-> {Hooks}-> {$method};
+	return $self-> super( $method, @param) unless exists $self-> {attr}-> {Hooks}-> {$method};
 	$self-> {attr}-> {Hooks}-> {$method}->( $self, $storage, @param);
 }
 
 sub STORE
 {
 	my ( $self, $storage, $key, $val) = @_;
-	return $self-> next( $key, $val) if
+	return $self-> super( $key, $val) if
 		$key eq 'Hooks' or 
 		not exists $self-> {attr}-> {Hooks}-> {STORE};
 	$self-> {attr}-> {Hooks}-> {STORE}->( @_);

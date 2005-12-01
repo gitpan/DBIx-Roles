@@ -1,4 +1,4 @@
-# $Id: Roles.pm,v 1.4 2005/11/22 22:03:09 dk Exp $(' 'x @{$self->{loops}}),i
+# $Id: Roles.pm,v 1.10 2005/12/01 14:34:14 dk Exp $(' 'x @{$self->{loops}}),i
 
 package DBIx::Roles;
 
@@ -7,7 +7,7 @@ use Scalar::Util qw(weaken);
 use strict;
 use vars qw($VERSION %loaded_packages $DBI_connect %DBI_select_methods $debug $ExportDepth);
 
-$VERSION = '1.01';
+$VERSION = '1.02';
 $ExportDepth = 0;
 $DBI_connect = \&DBI::connect;
 %DBI_select_methods = map { $_ => 1 } qw(
@@ -44,7 +44,7 @@ sub __DBI_import_connect
 	if ( @packages) {
 		return DBIx::Roles-> new( @packages)-> connect( @_);
 	} else {
-		return $DBI_connect->( @_);
+		return $DBI_connect->( 'DBI', @_);
 	}
 }
 
@@ -73,6 +73,7 @@ sub new
 			map { $_ => undef } @packages
 		}, 
 		defaults=> {},        # default values and source packages for attributes 
+		disabled=> {},        # dynamically disabled packages
 		attr	=> {},        # packages' public data - all mixed, and
 		vmt	=> {},        # packages' public methods - also all mixed
 		                      # name clashes in public and vmt will be explicitly fatal 
@@ -173,7 +174,7 @@ sub connect
 		if $attr->{RaiseError};
 	return undef;
 }
- 
+
 # access object data instance
 sub instance {  tied %{ $_[0] } }
 
@@ -254,7 +255,7 @@ package DBIx::Roles::Instance;
 sub DBI_connect { shift; $DBIx::Roles::DBI_connect->('DBI', @_ ) }
 
 # iterate through each package in the recursive way
-sub get_next
+sub get_super
 {
 	my ( $self) = @_;
 
@@ -264,6 +265,7 @@ sub get_next
 		if ( $ctx->[0] < scalar @{$self-> {packages}}) {
 			# next package
 			my $package = $self-> {packages}->[ $ctx->[0]++];
+			next if $self->{disabled}->{$package};
 			next unless $ref = $package-> can( $ctx->[1]);
 			print STDERR ('  'x @{$self->{loops}}), "-> $package\n" if $DBIx::Roles::debug;
 			return ( $ref, $self-> {private}-> {$package});
@@ -277,10 +279,10 @@ sub get_next
 }
 
 # iterate through each package in the recursive way
-sub next
+sub super
 {
 	my $self = shift;
-	my ( $ref, $private) = $self-> get_next;
+	my ( $ref, $private) = $self-> get_super;
 	return unless $ref;
 	return $ref-> ( $self, $private, @_);
 }
@@ -311,9 +313,9 @@ sub dispatch
 			if $DBIx::Roles::debug;
 	eval {
 		if ( $wa) {
-			@ret = $self-> next( @_);
+			@ret = $self-> super( @_);
 		} else {
-			$ret[0] = $self-> next( @_);
+			$ret[0] = $self-> super( @_);
 		}
 	};
 	print STDERR ('  'x @{$self->{loops}}), "done $method\n" if $DBIx::Roles::debug;
@@ -333,7 +335,7 @@ sub _dispatch_dbi_eol
 	$ctx->[1] = 'dbi_method';    # call that hook instead 
 	$ctx->[2] = undef;           # clear the eol handler
 	print STDERR ('  'x @{$self->{loops}}), "done($method),dispatch(dbi_method)\n" if $DBIx::Roles::debug;
-	return sub { $_[0]-> next( $method, @_[2..$#_]) }
+	return sub { $_[0]-> super( $method, @_[2..$#_]) }
 }
 
 # dispatch a native DBI method - first $method, then dbi_method hooks
@@ -341,6 +343,24 @@ sub dispatch_dbi_method
 {
 	my ( $self, $method, @parameters) = @_;
 	return $self-> dispatch( \&_dispatch_dbi_eol, $method, @parameters);
+}
+
+sub enable_roles
+{ 
+	my $hash = shift->{disabled};
+	for my $p (@_) {
+		my $g = ($p =~ /:/) ? $p : "DBIx::Roles::$p";
+		$hash->{$g}-- if $hash->{$g} > 0;
+	}
+}
+
+sub disable_roles 
+{ 
+	my $hash = shift->{disabled};
+	for my $p (@_) {
+		my $g = ($p =~ /:/) ? $p : "DBIx::Roles::$p";
+		$hash->{$g}++;
+	}
 }
 
 # R/W access to the underlying DBI connection handle
@@ -519,6 +539,8 @@ L<DBIx::Roles::Hook> - Exports callbacks to override DBI calls.
 
 L<DBIx::Roles::InlineArray> - Flattens arrays passed as parameters to DBI calls into strings.
 
+L<DBIx::Roles::Shared> - Share DB connection handles
+
 L<DBIx::Roles::SQLAbstract> - Exports methods C<insert>,C<select>,C<update> etc in the
 L<SQL::Abstract> fashion. Inspired by L<DBIx::Abstract>.
 
@@ -568,7 +590,7 @@ transform the parameters:
 	     my ( $dsn, $user, $pass) = read_from_config;
 	     unshift @$parameters, $dsn, $user, $pass;
 	}
-	return $self-> next( $method, $parameters);
+	return $self-> super( $method, $parameters);
     }
 
 The method is called before any call to DBI methods, so parameters are translated
@@ -588,10 +610,10 @@ the package must define a method with the same name:
 Since all roles are called recursively, one inside another, a role that
 wishes to propagate the call further down the line, must call
 
-    return $self-> next( @parameters)
+    return $self-> super( @parameters)
 
 as it is finished. If, on the contrary, the role decides to intercept the call,
-C<next> need not to be called.  Also, in case one needs to intercept not just
+C<super> need not to be called.  Also, in case one needs to intercept not just
 one but many DBI calls, it is possible to declare a method that is called when
 any DBI call is issued:
 
@@ -599,10 +621,10 @@ any DBI call is issued:
     {
        my ( $self, $storage, $method, @parameters) = @_;
        print "DBI method $method called\n";
-       return $self-> next( $method, @parameters);
+       return $self-> super( $method, @parameters);
     }
 
-Note: C<next> is important, and forgetting to call it leads to strange errors
+Note: C<super> is important, and forgetting to call it leads to strange errors
 
 =head2 Overloading DBI attributes
 
@@ -618,7 +640,7 @@ by C<STORE> method:
 	} else {
 	    return;  # deny change
 	}
-        return $self-> next( $key, $val);
+        return $self-> super( $key, $val);
     }
 
 =head2 Declaring own attributes, methods, and private storage
@@ -671,7 +693,7 @@ are dispatched to it:
        if ( 42 == length $method) {
 	   return md5( @parameters);
        }
-       return $self-> next( $method, @parameters);
+       return $self-> super( $method, @parameters);
    }
 
 L<DBIx::Role::StoredProcedures> uses this technique to call stored procedures.
@@ -727,7 +749,7 @@ first role in the role chain.
 =item dispatch_dbi_method $self, $wantarray, $method, @parameters
 
 Same principle as dispatch, but first calls for $method, and then,
-for C<dbi_method>, so that when the last role's $method calls C<next>,
+for C<dbi_method>, so that when the last role's $method calls C<super>,
 the call is dispatched to the first role's C<dbi_method>.
 
 =back
@@ -737,11 +759,11 @@ the call is dispatched to the first role's C<dbi_method>.
 If the next role method is needed to be called indirectly,
 one can get a reference to the next method by calling
 
-    ( $ref, $private_storage) = $self-> get_next;
+    ( $ref, $private_storage) = $self-> get_super;
 
 which returns the code reference and an extra parameter for the method.  If the
 method is to be called repeatedly, it should be noted that inside that call
-C<next> can also be called repeatedly. To save and restore the call context,
+C<super> can also be called repeatedly. To save and restore the call context,
 use read-write method C<context>:
 
    my $ctx = $self-> context;
@@ -788,6 +810,25 @@ prevents C<DBIx::Role> from loading modules listed there:
    package DBIx::Roles::My_DBI_Role;
 
    sub connect { .. read from config, for example ... }
+
+=head2 Dynamically disable and enable roles
+
+A pair of methods, C<disable_roles> and C<enable_roles> accepts a list
+of roles and disables/enables these in an incremental fashion, so that
+
+   $self-> disable_roles(qw(MyRole));
+   $self-> disable_roles(qw(MyRole));
+   $self-> enable_roles(qw(MyRole));
+
+leaves the role disabled. The methods don't fail if there's no corresponding
+role(s).
+   
+=head2 Accessing the internals from outside
+
+C<DBIx::Roles> defines method C<instance> that returns the underlying object
+with API described above. All management of list of roles, call propagation,
+etc etc is possible via this reference. In particular, the underlying DB
+connection handle can be reached by reading C<< $db-> instance-> dbh >> .
 
 =head1 SEE ALSO
 

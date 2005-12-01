@@ -1,4 +1,4 @@
-# $Id: InlineArray.pm,v 1.1.1.1 2005/11/20 18:01:06 dk Exp $
+# $Id: InlineArray.pm,v 1.4 2005/11/30 13:13:37 dk Exp $
 
 # recursively straightens array references into {,,}-strings 
 # useful for DBD implementations that cannot do that themselves
@@ -22,14 +22,16 @@ sub inline
 sub rewrite
 {
 	my ( $self, $storage, $method, $params) = @_;
+	if (
+		$method eq 'do' or
+		exists $DBIx::Roles::DBI_select_methods{$method}
+	) {
+		my $shift = ( $method eq 'selectall_hashref') ? 3 : 2;
+		splice( @$params, $shift, $#$params, inline( @$params[ $shift..$#$params ]))
+			if $shift < @$params;
+	}
 
-	splice( @$params, 2, $#$params, inline( @$params[ 2..$#$params ]))
-		if (
-			$method eq 'do' or
-			exists $DBIx::Roles::DBI_select_methods{$method}
-		) and 2 < @$params;
-
-	return $self-> next( $method, @$params);
+	return $self-> super( $method, $params);
 }
 
 1;

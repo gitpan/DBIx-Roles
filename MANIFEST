@@ -3,6 +3,7 @@ Roles/AutoReconnect.pm
 Roles/Buffered.pm
 Roles/InlineArray.pm
 Roles/Hook.pm
+Roles/Shared.pm
 Roles/StoredProcedures.pm
 Roles/SQLAbstract.pm
 MANIFEST

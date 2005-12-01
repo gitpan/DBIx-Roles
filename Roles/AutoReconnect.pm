@@ -1,4 +1,4 @@
-# $Id: AutoReconnect.pm,v 1.2 2005/11/22 22:03:09 dk Exp $
+# $Id: AutoReconnect.pm,v 1.3 2005/11/29 11:55:01 dk Exp $
 
 package DBIx::Roles::AutoReconnect;
 
@@ -26,10 +26,10 @@ sub connect
 
 	@$conninfo = ( $dsn, $user, $pass, $attr );
 	
-	my ( $next, $private) = $self-> get_next;
-	return unless $next;
+	my ( $super, $private) = $self-> get_super;
+	return unless $super;
 
-	my $dbh = db_connect( $self, $conninfo, $next, $private);
+	my $dbh = db_connect( $self, $conninfo, $super, $private);
 
 	return $dbh;
 }
@@ -106,11 +106,11 @@ sub dbi_method
 {
 	my ( $self, $conninfo, $method, @parameters) = @_;
 
-	return $self-> next( $method, @parameters) if $method eq 'connect';
+	return $self-> super( $method, @parameters) if $method eq 'connect';
 
 	my ( $wantarray, @ret) = ( wantarray);
-	my ( $next, $private) = $self-> get_next;
-	return unless $next;
+	my ( $super, $private) = $self-> get_super;
+	return unless $super;
 
 	my $tries = 0;
 	while ( 1) {
@@ -140,9 +140,9 @@ sub dbi_method
 			my $context = $self-> context;
 			eval {
 				if ( $wantarray) {
-					@ret = $next-> ($self, $private, $method, @parameters);
+					@ret = $super-> ($self, $private, $method, @parameters);
 				} else {
-					$ret[0] = $next-> ($self, $private, $method, @parameters);
+					$ret[0] = $super-> ($self, $private, $method, @parameters);
 				}
 			};
 			return wantarray ? @ret : $ret[0]
@@ -182,7 +182,7 @@ sub STORE
 	}
 
 	
-	return $self-> next( $key, $val);
+	return $self-> super( $key, $val);
 }
 
 1;

@@ -1,4 +1,4 @@
-# $Id: SQLAbstract.pm,v 1.1.1.1 2005/11/20 18:01:06 dk Exp $
+# $Id: SQLAbstract.pm,v 1.2 2005/11/29 11:55:01 dk Exp $
 
 package DBIx::Roles::SQLAbstract;
 use strict;
@@ -34,7 +34,9 @@ sub select
 { 
 	my ( $self, $sql) = @_;
 	my ( $query, @bindval) = abstract('select', @_);
-	return $self-> selectall_arrayref( $query, {}, @bindval);
+	my $sth = $self-> prepare( $query);
+	$sth-> execute( @bindval) if $sth;
+	return $sth;
 }
 
 sub update 
@@ -71,7 +73,7 @@ sub STORE
 	# delete the SQL::Abstract object if settings have changed
 	undef $sql->[0] if exists $defaults{$key};
 
-	return $self-> next( $key, $val);
+	return $self-> super( $key, $val);
 }
 
 1;
@@ -101,6 +103,34 @@ L<SQL::Abstract> fashion. See L<SQL::Abstract> for syntax of these methods.
      $dbh-> insert( $table, \%fieldvals || \@values);
      $dbh-> update( $table, \%fieldvals, \%where);
      $dbh-> delete( $table, \%where);
+
+=head1 API
+
+Mostly all of the text below is copy-pasted from L<SQL::Abstract> (c) 2001-2005 Nathan Wiger
+
+=over
+
+=item insert( $table, \%fieldvals || \@values);
+
+This is the simplest function. You simply give it a table name and either an
+arrayref of values or hashref of field/value pairs.
+
+=item select ($table, \@fields, \%where, \@order)
+
+This takes a table, arrayref of fields (or '*'), optional hashref WHERE clause,
+and optional arrayref order by.
+
+Prepares and executes a query, and returns the statement handle, if successful.
+
+=item update( $table, \%fieldvals, \%where);
+
+This takes a table, hashref of field/value pairs, and an optional hashref WHERE clause.
+
+=item delete( $table, \%where);
+
+This takes a table name and optional hashref WHERE clause.
+
+=back
 
 =head1 SEE ALSO
 

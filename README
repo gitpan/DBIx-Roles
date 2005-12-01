@@ -70,6 +70,8 @@ Predefined role modules
     DBIx::Roles::InlineArray - Flattens arrays passed as parameters to DBI
     calls into strings.
 
+    DBIx::Roles::Shared - Share DB connection handles
+
     DBIx::Roles::SQLAbstract - Exports methods "insert","select","update"
     etc in the SQL::Abstract fashion. Inspired by DBIx::Abstract.
 
@@ -116,7 +118,7 @@ Programming interfaces
                  my ( $dsn, $user, $pass) = read_from_config;
                  unshift @$parameters, $dsn, $user, $pass;
             }
-            return $self-> next( $method, $parameters);
+            return $self-> super( $method, $parameters);
         }
 
     The method is called before any call to DBI methods, so parameters are
@@ -135,10 +137,10 @@ Programming interfaces
     Since all roles are called recursively, one inside another, a role that
     wishes to propagate the call further down the line, must call
 
-        return $self-> next( @parameters)
+        return $self-> super( @parameters)
 
     as it is finished. If, on the contrary, the role decides to intercept
-    the call, "next" need not to be called. Also, in case one needs to
+    the call, "super" need not to be called. Also, in case one needs to
     intercept not just one but many DBI calls, it is possible to declare a
     method that is called when any DBI call is issued:
 
@@ -146,10 +148,10 @@ Programming interfaces
         {
            my ( $self, $storage, $method, @parameters) = @_;
            print "DBI method $method called\n";
-           return $self-> next( $method, @parameters);
+           return $self-> super( $method, @parameters);
         }
 
-    Note: "next" is important, and forgetting to call it leads to strange
+    Note: "super" is important, and forgetting to call it leads to strange
     errors
 
   Overloading DBI attributes
@@ -165,7 +167,7 @@ Programming interfaces
             } else {
                 return;  # deny change
             }
-            return $self-> next( $key, $val);
+            return $self-> super( $key, $val);
         }
 
   Declaring own attributes, methods, and private storage
@@ -218,7 +220,7 @@ Programming interfaces
            if ( 42 == length $method) {
                return md5( @parameters);
            }
-           return $self-> next( $method, @parameters);
+           return $self-> super( $method, @parameters);
        }
 
     DBIx::Role::StoredProcedures uses this technique to call stored
@@ -270,18 +272,18 @@ Programming interfaces
 
     dispatch_dbi_method $self, $wantarray, $method, @parameters
         Same principle as dispatch, but first calls for $method, and then,
-        for "dbi_method", so that when the last role's $method calls "next",
-        the call is dispatched to the first role's "dbi_method".
+        for "dbi_method", so that when the last role's $method calls
+        "super", the call is dispatched to the first role's "dbi_method".
 
   Restarting DBI calls
     If the next role method is needed to be called indirectly, one can get a
     reference to the next method by calling
 
-        ( $ref, $private_storage) = $self-> get_next;
+        ( $ref, $private_storage) = $self-> get_super;
 
     which returns the code reference and an extra parameter for the method.
     If the method is to be called repeatedly, it should be noted that inside
-    that call "next" can also be called repeatedly. To save and restore the
+    that call "super" can also be called repeatedly. To save and restore the
     call context, use read-write method "context":
 
        my $ctx = $self-> context;
@@ -328,6 +330,24 @@ Programming interfaces
        package DBIx::Roles::My_DBI_Role;
 
        sub connect { .. read from config, for example ... }
+
+  Dynamically disable and enable roles
+    A pair of methods, "disable_roles" and "enable_roles" accepts a list of
+    roles and disables/enables these in an incremental fashion, so that
+
+       $self-> disable_roles(qw(MyRole));
+       $self-> disable_roles(qw(MyRole));
+       $self-> enable_roles(qw(MyRole));
+
+    leaves the role disabled. The methods don't fail if there's no
+    corresponding role(s).
+
+  Accessing the internals from outside
+    "DBIx::Roles" defines method "instance" that returns the underlying
+    object with API described above. All management of list of roles, call
+    propagation, etc etc is possible via this reference. In particular, the
+    underlying DB connection handle can be reached by reading "$db->
+    instance-> dbh" .
 
 SEE ALSO
     Dependencies - DBI, SQL::Abstract

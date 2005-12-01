@@ -1,4 +1,4 @@
-# $Id: Buffered.pm,v 1.2 2005/11/20 18:32:42 dk Exp $
+# $Id: Buffered.pm,v 1.3 2005/11/29 11:55:01 dk Exp $
 
 package DBIx::Roles::Buffered;
 
@@ -29,7 +29,7 @@ sub dbi_method
 {
 	my ( $self, $storage, $method, @params) = @_;
 
-	return $self-> next( $method, @params) if
+	return $self-> super( $method, @params) if
 		$storage-> {lock} or
 		not $self->{attr}->{Buffered} or
 		( $method ne 'do' and $method ne 'selectrow_array');
@@ -77,28 +77,28 @@ sub begin_work
 {
 	my ( $self, $storage) = @_;
 	flush( $self, $storage);
-	return $self-> next;
+	return $self-> super;
 }
 
 sub rollback
 {
 	my ( $self, $storage) = @_;
 	flush( $self, $storage, 1);
-	return $self-> next;
+	return $self-> super;
 }
 
 sub commit
 {
 	my ( $self, $storage) = @_;
 	flush( $self, $storage);
-	return $self-> next;
+	return $self-> super;
 }
 
 sub disconnect
 {
 	my ( $self, $storage) = @_;
 	flush( $self, $storage);
-	return $self-> next;
+	return $self-> super;
 }
 
 sub STORE
@@ -113,7 +113,7 @@ sub STORE
 			unless $val =~ /^\d+$/;
 	}
 
-	return $self-> next( $key, $val);
+	return $self-> super( $key, $val);
 }
 
 1;
