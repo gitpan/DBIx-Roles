@@ -1,4 +1,4 @@
-# $Id: Shared.pm,v 1.2 2005/11/30 11:51:24 dk Exp $
+# $Id: Shared.pm,v 1.3 2005/12/01 18:11:28 dk Exp $
 
 package DBIx::Roles::Shared;
 
@@ -93,8 +93,8 @@ DBIx::Roles::Shared - Share DB connection handles
 =head1 DESCRIPTION
 
 Caches DB handles for already established connections, and returns these when
-another C<connect> call is issued. Not really useful unless cheap
-connect/disconnect calls are preferred.
+another C<connect> call is issued. Serves as a replacement to 
+C<< DBI-> connect_cached >>.
 
 =head1 SIDE EFFECTS
 

@@ -1,4 +1,4 @@
-# $Id: AutoReconnect.pm,v 1.3 2005/11/29 11:55:01 dk Exp $
+# $Id: AutoReconnect.pm,v 1.4 2005/12/01 18:09:52 dk Exp $
 
 package DBIx::Roles::AutoReconnect;
 
@@ -92,21 +92,12 @@ sub db_connect
 	return $ret;
 }
 
-sub begin_work { 
-	die "DBI::begin_work() cannot be used together with DBIx::Roles::AutoReconnect" 
-}
-sub rollback { 
-	die "DBI::rollback() cannot be used together with DBIx::Roles::AutoReconnect" 
-}
-sub commit { 
-	die "DBI::commit() cannot be used together with DBIx::Roles::AutoReconnect" 
-}
-
 sub dbi_method
 {
 	my ( $self, $conninfo, $method, @parameters) = @_;
 
-	return $self-> super( $method, @parameters) if $method eq 'connect';
+	return $self-> super( $method, @parameters) 
+		if $method eq 'connect' or not $self->dbh->{AutoCommit};
 
 	my ( $wantarray, @ret) = ( wantarray);
 	my ( $super, $private) = $self-> get_super;
@@ -244,16 +235,12 @@ Default: 5
 
 =head1 NOTES
 
-Transactions are not restarted if connection breaks, moreover, C<begin_work>,
-C<rollback>, and C<commit> die when called, to protect from unintentional use.
-To use transactions, operate with the original DBI handle returned by
-C<dbh>. C<AutoCommit> is allowed though. 
+Transactions are not restarted if connection breaks or C<AutoCommit> is not set.
 
-C<RaiseError> is mostly useless with this role, because the DBI errors that
-might raise the exception, are all wrapped in eval by the connection detector
-code. The only place where it is useful, is when C<ReconnectMaxTries> tries are
-exhausted, and depending on C<RaiseError>, the code dies or returns C<undef>
-from the C<connect> call.
+C<RaiseError> is not called when a connection is restarted, but rather when
+C<ReconnectMaxTries> tries are exhausted, and depending on C<RaiseError>, the
+code dies or returns C<undef> from the C<connect> call. All other error-related
+attributes (C<PrintError>, C<HandleError>) are not affected.
 
 =head1 SEE ALSO
 

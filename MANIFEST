@@ -6,6 +6,7 @@ Roles/Hook.pm
 Roles/Shared.pm
 Roles/StoredProcedures.pm
 Roles/SQLAbstract.pm
+Roles/Transaction.pm
 MANIFEST
 Changes
 Makefile.PL

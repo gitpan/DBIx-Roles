@@ -1,4 +1,4 @@
-# $Id: Roles.pm,v 1.10 2005/12/01 14:34:14 dk Exp $(' 'x @{$self->{loops}}),i
+# $Id: Roles.pm,v 1.14 2005/12/02 09:36:00 dk Exp $(' 'x @{$self->{loops}}),i
 
 package DBIx::Roles;
 
@@ -7,7 +7,7 @@ use Scalar::Util qw(weaken);
 use strict;
 use vars qw($VERSION %loaded_packages $DBI_connect %DBI_select_methods $debug $ExportDepth);
 
-$VERSION = '1.02';
+$VERSION = '1.03';
 $ExportDepth = 0;
 $DBI_connect = \&DBI::connect;
 %DBI_select_methods = map { $_ => 1 } qw(
@@ -189,11 +189,13 @@ sub disconnect
 
 sub AUTOLOAD
 {
+	my @p = @_;
+
 	use vars qw($AUTOLOAD);
 	my $method = $AUTOLOAD;
 	$method =~ s/^.*:://;
 
-	my $self = shift;
+	my $self = shift @p;
 	my $inst = $self-> instance;
 
 	my ($package, @ret); 
@@ -203,8 +205,6 @@ sub AUTOLOAD
 		exists( $DBI::DBI_methods{db}->{$method})
 	) {
 		# is it a DBI native method?
-		my @p = @_;
-
 		# rewrite
 		$inst-> dispatch( 'rewrite', $method, \@p);
 
@@ -222,16 +222,16 @@ sub AUTOLOAD
 			unless $ref; # XXX AUTOLOAD cases are not handled
 
 		if ( wantarray) {
-			@ret    = $ref->( $inst, $inst->{private}->{$package}, @_);
+			@ret    = $ref->( $inst, $inst->{private}->{$package}, @p);
 		} else {
-			$ret[0] = $ref->( $inst, $inst->{private}->{$package}, @_);
+			$ret[0] = $ref->( $inst, $inst->{private}->{$package}, @p);
 		}
 	} else {
 		# none of the above, try wildcards
 		if ( wantarray) {
-			@ret = $inst-> dispatch( 'any', $method, @_);
+			@ret = $inst-> dispatch( 'any', $method, @p);
 		} else {
-			$ret[0] = $inst-> dispatch( 'any', $method, @_);
+			$ret[0] = $inst-> dispatch( 'any', $method, @p);
 		}
 	}
 
@@ -539,13 +539,15 @@ L<DBIx::Roles::Hook> - Exports callbacks to override DBI calls.
 
 L<DBIx::Roles::InlineArray> - Flattens arrays passed as parameters to DBI calls into strings.
 
-L<DBIx::Roles::Shared> - Share DB connection handles
+L<DBIx::Roles::Shared> - Share DB connection handles. To be used instead of C<< DBI-> connect_cached >>.
 
 L<DBIx::Roles::SQLAbstract> - Exports methods C<insert>,C<select>,C<update> etc in the
 L<SQL::Abstract> fashion. Inspired by L<DBIx::Abstract>.
 
 L<DBIx::Roles::StoredProcedures> - Treats any method reached AUTOLOAD as a call to a 
 stored procedure.
+
+L<DBIx::Roles::Transaction> - Allow nested transactions like C<DBIx::Transaction> does.
 
 =head1 Programming interfaces
 
@@ -823,12 +825,17 @@ of roles and disables/enables these in an incremental fashion, so that
 leaves the role disabled. The methods don't fail if there's no corresponding
 role(s).
    
-=head2 Accessing the internals from outside
+=head2 Accessing the internals
 
 C<DBIx::Roles> defines method C<instance> that returns the underlying object
 with API described above. All management of list of roles, call propagation,
 etc etc is possible via this reference. In particular, the underlying DB
 connection handle can be reached by reading C<< $db-> instance-> dbh >> .
+
+=head1 BUGS
+
+C<< DBI-> connect_cached >> is not supported. Use L<DBIx::Roles::Shared>>
+instead.
 
 =head1 SEE ALSO
 

@@ -1,8 +1,8 @@
 #!/usr/bin/perl
-# $Id: tests.t,v 1.5 2005/12/01 11:18:09 dk Exp $
+# $Id: tests.t,v 1.6 2005/12/01 18:12:37 dk Exp $
 
 use strict;
-use Test::More tests => 17;
+use Test::More tests => 18;
 $SIG{__DIE__} = sub { # need no Test::Builder hacks
 	return if $^S;
 	Carp::cluck(@_);
@@ -44,7 +44,10 @@ ok( $had_disconnect, "disconnect");
 package Phase2;
 use strict;
 import Test::More;
-use DBIx::Roles qw(AutoReconnect Buffered InlineArray Shared StoredProcedures Hook SQLAbstract);
+use DBIx::Roles qw(
+	AutoReconnect Buffered InlineArray Shared 
+	StoredProcedures Transaction Hook SQLAbstract 
+);
 my $do = 0;
 my $do_params;
 
@@ -81,6 +84,16 @@ ok( $g && $g == 42, "'any'/StoredProcedures");
 my @g = $d-> do( 'select ?', {}, [1,2,3]);
 ok(( 5 == @g) and not( ref($g[4])), "'rewrite'/InlineArray");
 
+# transaction
+my $begin_works = 0;
+$d->{Hooks}->{begin_work} = sub {$begin_works++; 1};
+$d->{Hooks}->{rollback} = sub {};
+$d->begin_work;
+$d->begin_work;
+$d->rollback;
+$g = $d->commit || 0;
+ok(( 0 == $g and 1 == $begin_works), "Transaction");
+
 # SQL::Abstract
 @g = $d-> insert( 'moo', [1..4]);
 ok( $g[2] && $g[2] =~ /insert\s+into\s+moo/i, "SQL::Abstract");
@@ -100,6 +113,7 @@ $d->{Hooks}->{do} = sub {
 };
 $d-> {ReconnectMaxTries} = $do_retries + 2;
 $d-> {ReconnectTimeout} = 0;
+$d-> {AutoCommit} = 1; # it doesn't like transactions 
 $d-> {PrintError} = 0; # it warns when reconnects
 $d-> do('select 0');
 ok(( -1 == $do_retries and $d-> dbh and 1), "AutoReconnect");
@@ -124,6 +138,7 @@ $DBIx::Roles::DBI_connect = sub {
 $k1-> {Buffered} = 0;
 $k1-> {ReconnectMaxTries} = $do_retries + 2;
 $k1-> {ReconnectTimeout} = 0;
+$k1-> {AutoCommit} = 1; # it doesn't like transactions 
 $k1-> {PrintError} = 0; # it warns when reconnects
 $k1->{Hooks}->{do} = sub { 
 	# emulate connection break
