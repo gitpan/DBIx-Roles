@@ -1,4 +1,4 @@
-# $Id: Roles.pm,v 1.14 2005/12/02 09:36:00 dk Exp $(' 'x @{$self->{loops}}),i
+# $Id: Roles.pm,v 1.18 2006/01/30 10:58:51 dk Exp $
 
 package DBIx::Roles;
 
@@ -7,7 +7,7 @@ use Scalar::Util qw(weaken);
 use strict;
 use vars qw($VERSION %loaded_packages $DBI_connect %DBI_select_methods $debug $ExportDepth);
 
-$VERSION = '1.03';
+$VERSION = '1.04';
 $ExportDepth = 0;
 $DBI_connect = \&DBI::connect;
 %DBI_select_methods = map { $_ => 1 } qw(
@@ -198,7 +198,7 @@ sub AUTOLOAD
 	my $self = shift @p;
 	my $inst = $self-> instance;
 
-	my ($package, @ret); 
+	my $package;
 
 	if ( 
 		exists( $DBI::DBI_methods{common}->{$method}) or
@@ -209,34 +209,21 @@ sub AUTOLOAD
 		$inst-> dispatch( 'rewrite', $method, \@p);
 
 		# dispatch
-		if ( wantarray) {
-			@ret = $inst-> dispatch_dbi_method( $method, @p);
-		} else {
-			$ret[0] = $inst-> dispatch_dbi_method( $method, @p);
-		}
+		@_ = ( $inst, $method, @p);
+		goto $inst-> can('dispatch_dbi_method');
 	} elsif ( exists $inst->{vmt}->{$method}) {
 		# is it an exported method for outside usage?
 		my $package = $inst->{vmt}->{$method};
 		my $ref = $package-> can( $method);
 		die "Package '$package' declared method '$method' as available, but it is not"
 			unless $ref; # XXX AUTOLOAD cases are not handled
-
-		if ( wantarray) {
-			@ret    = $ref->( $inst, $inst->{private}->{$package}, @p);
-		} else {
-			$ret[0] = $ref->( $inst, $inst->{private}->{$package}, @p);
-		}
+		@_ = ( $inst, $inst->{private}->{$package}, @p);
+		goto $ref;
 	} else {
 		# none of the above, try wildcards
-		if ( wantarray) {
-			@ret = $inst-> dispatch( 'any', $method, @p);
-		} else {
-			$ret[0] = $inst-> dispatch( 'any', $method, @p);
-		}
+		@_ = ( $inst, 'any', $method, @p);
+		goto $inst-> can('dispatch');
 	}
-
-EXIT:
-	return wantarray ? @ret : $ret[0];
 }
 
 sub DESTROY
@@ -284,7 +271,8 @@ sub super
 	my $self = shift;
 	my ( $ref, $private) = $self-> get_super;
 	return unless $ref;
-	return $ref-> ( $self, $private, @_);
+	unshift @_, $self, $private;
+	goto $ref;
 }
 
 # saves and restores context of dispatch calls - needed if underlying roles 
@@ -342,7 +330,8 @@ sub _dispatch_dbi_eol
 sub dispatch_dbi_method
 {
 	my ( $self, $method, @parameters) = @_;
-	return $self-> dispatch( \&_dispatch_dbi_eol, $method, @parameters);
+	splice( @_, 1, 0, \&_dispatch_dbi_eol);
+	goto &dispatch;
 }
 
 sub enable_roles
@@ -381,7 +370,8 @@ sub AUTOLOAD
 	my $method = $AUTOLOAD;
 	$method =~ s/^.*:://;
 	
-	shift-> dispatch_dbi_method( $method, @_);
+	splice( @_, 1, 0, $method);
+	goto &dispatch_dbi_method;
 }
 
 sub TIEHASH { $_[1] }
@@ -520,6 +510,30 @@ All these are equivalent, and result in construction of an object that plays
 roles C<DBIx::Roles::AutoReconnect> and C<DBIx::Roles::SQLAbstract>, plus does all 
 DBI functionality.
 
+An example below uses C<DBIx::Roles> to contact a PostgreSQL DB, and then read 
+some backend information:
+
+   use strict;
+   use DBIx::Roles qw(SQLAbstract StoredProcedures);
+   
+   # connect to a predefined DB template1
+   my $d = DBI-> connect( 'dbi:Pg:dbname=template1', 'pgsql', '');
+   
+   # StoredProcedures converts pg_backend_pid() into "SELECT * FROM pg_backend_pid()"
+   print "Backend PID: ", $d-> pg_backend_pid, "\n";
+   
+   # SQLAbstract declares select(), use it to read currently connected clients
+   use Data::Dumper;
+   my $st = $d-> select( 'pg_stat_activity', '*');
+   print Dumper( $st-> fetchall_arrayref );
+   
+   # done
+   $d-> disconnect;
+
+The roles used in the example are basically syntactic sugar, but there are other roles
+that do alter the program behavior, if applied. For example, adding C<AutoReconnect> to 
+the list of the imported roles makes C<select()> calls restartable.
+
 =head1 Predefined role modules
 
 All modules included in packages have their own manual pages, so only brief
@@ -538,6 +552,8 @@ to DBI handle.
 L<DBIx::Roles::Hook> - Exports callbacks to override DBI calls.
 
 L<DBIx::Roles::InlineArray> - Flattens arrays passed as parameters to DBI calls into strings.
+
+L<DBIx::Roles::RaiseError> - Change defaults to C<< RaiseError => 1 >>
 
 L<DBIx::Roles::Shared> - Share DB connection handles. To be used instead of C<< DBI-> connect_cached >>.
 

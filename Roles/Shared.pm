@@ -1,4 +1,4 @@
-# $Id: Shared.pm,v 1.3 2005/12/01 18:11:28 dk Exp $
+# $Id: Shared.pm,v 1.4 2005/12/19 15:02:00 dk Exp $
 
 package DBIx::Roles::Shared;
 
@@ -18,6 +18,7 @@ sub connect
 	if ( exists $instances{$inst_key}) {
 		# apparently, connect() without disconnect --
 		# 1. find if the object was connected to another handle, and clean it up
+		keys %dsns; # reset each()
 		while ( my ( $k, $v) = each %dsns) {
 			my @d = grep { $_ != $self } @$v;
 			next if @d == @$v;
@@ -59,6 +60,7 @@ sub disconnect
 {
 	my $self = $_[0];
 
+	keys %dsns; # reset each()
 	while ( my ( $k, $v) = each %dsns) {
 		my @d = grep { $_ != $self } @$v;
 		if ( @d == @$v) {

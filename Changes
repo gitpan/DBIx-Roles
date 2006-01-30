@@ -4,4 +4,4 @@
 
 1.02 - Add Roles::Shared.
 
-1.03 - Add Roles::Transaction.
+1.03 - Add Roles::Transaction and Roles::RaiseError
